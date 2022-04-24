@@ -3,9 +3,11 @@ import json
 import requests
 import matplotlib.pyplot as plt
 import os
+import re
 import sqlite3
 import unittest
 import numpy as np
+from sklearn.semi_supervised import LabelSpreading
 
 def setUpDatabase(db_name):
     path = os.path.dirname(os.path.abspath(__file__))
@@ -59,9 +61,6 @@ def add_to_database(cur, conn, query, db_filename, start, end):
 
 def no_repeats(cur, conn, query):
 
-    cur.execute("CREATE TABLE IF NOT EXISTS chicago_no_repeats (object_id INTEGER PRIMARY KEY, title TEXT, artist_name TEXT, object_enddate INTEGER, medium TEXT, origin TEXT, popularity TEXT)")
-    conn.commit()
-
     object_ids = get_ids(cur, conn, query)
     for id in object_ids:
         try:
@@ -90,12 +89,9 @@ def no_repeats(cur, conn, query):
             cur.execute("UPDATE chicago_objects SET origin = ? WHERE origin = ?", (origin_id, origin))
 
         except:
-            print("error in no repeats")
-
-    #UPDATE Users SET name='Charles' WHERE email='csev@umich.edu'                 
+            print("error in no repeats")               
 
     conn.commit()
-
 
 def create_name_table(cur, conn):
     cur.execute('''SELECT chicago_objects.artist_name FROM chicago_objects''')
@@ -142,17 +138,108 @@ def create_origin_table(cur, conn):
         cur.execute('''INSERT or ignore INTO chicago_origins (origin_id, origin_type) VALUES (?,?)''',(i, no_repeats_origins[i]))
     conn.commit()
 
+def popular_years(cur, conn): 
+    cur.execute('''SELECT chicago_objects.object_enddate, chicago_objects.popularity FROM chicago_objects WHERE chicago_objects.popularity = ?''', (1,))
+    conn.commit()
+    years = cur.fetchall()
+    count = 0
+    all_years = []
+    for tup in years:
+        year = tup[0]
+        all_years.append(year)
+        count += 1
+    return (count, all_years) # (6, [1900, 1919, 1929, 2020, 2020, 2020])
+
+def century_years(cur, conn): 
+    cur.execute('''SELECT chicago_objects.object_enddate FROM chicago_objects''')
+    conn.commit()
+    years = cur.fetchall()
+    century_dict = {} # key is century and value is list of years
+    for year in years: 
+        year = str(year[0])
+        for i in range(12,21):
+            regex = f"{str(i)}\d\d"
+            if re.search(regex, year) != None:
+                century = str(i) + "00"
+                if century not in century_dict:
+                    century_dict[century] = []
+                century_dict[century].append(year)
+    return century_dict
+
+def century_counts(cur, conn):
+    century_dict = century_years(cur, conn)
+    century_count = {}
+    for century in century_dict:
+        count = len(century_dict[century])
+        century_count[century] = count
+    return dict(sorted(century_count.items())) # key is century value is count of years 
+
+def plot_century_count(cur, conn):
+    century_dict = century_counts(cur, conn)
+    centuries = list(century_dict.keys())
+    #y_pos = np.arange(centuries)
+    counts = list(century_dict.values())
+    plt.barh(centuries, counts, color = 'green')
+    plt.xlabel("Century")
+    plt.ylabel("Years Count")
+    plt.title("Amount of Activism Artworks Created in Each Century")
+    plt.show()
+
+def origin_counts(cur, conn): 
+    cur.execute('''SELECT chicago_objects.origin FROM chicago_objects''')
+    cur.execute('''SELECT chicago_origins.origin_type FROM chicago_origins JOIN chicago_objects
+    ON chicago_objects.origin = chicago_origins.origin_id''')
+    conn.commit()
+    origins = cur.fetchall()
+    origin_dict = {}
+    for origin in origins:
+        origin = origin[0]
+        if origin not in origin_dict:
+            origin_dict[origin] = 0
+        origin_dict[origin] += 1
+    return origin_dict 
+
+def plot_origin_count(cur, conn):
+    origin_dict = origin_counts(cur, conn)
+    dict5 = {}
+    for k, v in origin_dict.items():
+        if int(v) > 4:
+            dict5[k] = v
+            # 5 or more!
+
+    labels = list(dict5.keys())
+    counts = list(dict5.values())
+    colors = ['yellowgreen', 'gold', 'lightskyblue', 'lightcoral', 'orange', 'plum']
+    patches, texts = plt.pie(counts, labels=labels, colors=colors)
+    plt.legend(patches, labels, loc = "best")
+    plt.axis("equal")
+    plt.title("Most Popular Origins of Chicago Activism Artworks")
+    plt.tight_layout()
+    plt.show()
+
+def write_file(cur, conn):
+    years = century_years(cur, conn)
+    centuries = century_counts(cur, conn)
+    countries = origin_counts(cur, conn)
+
+    with open('chicago_data.txt', 'w') as convert_file:
+        convert_file.write(json.dumps(years)) # keys are centuries, values are lists of years
+        convert_file.write(json.dumps(centuries)) # keys are centuries, values are counts
+        convert_file.write(json.dumps(countries)) # keys are countries, valaues are counts
+
 def main():
-    cur, conn = setUpDatabase("chicago_data4.db")
-    add_to_database(cur, conn, "activism","chicago_data4.db", 0, 25)
-    # add_to_database(cur, conn, "activism","chicago_data4.db", 25, 50)
-    # add_to_database(cur, conn, "activism","chicago_data4.db", 50, 75)
-    # add_to_database(cur, conn, "activism","chicago_data4.db", 75, 101) # one has exception
+    cur, conn = setUpDatabase("chicago_data5.db")
+    add_to_database(cur, conn, "activism","chicago_data5.db", 0, 25)
+    add_to_database(cur, conn, "activism","chicago_data5.db", 25, 50)
+    add_to_database(cur, conn, "activism","chicago_data5.db", 50, 75)
+    add_to_database(cur, conn, "activism","chicago_data5.db", 75, 101) # one has exception
     create_name_table(cur, conn)
     create_medium_table(cur, conn)
     create_origin_table(cur, conn)
     no_repeats(cur, conn, "activism")
-
+    plot_century_count(cur, conn)
+    plot_origin_count(cur, conn)
+    write_file(cur, conn)
 
 if __name__ == "__main__":
     main()
