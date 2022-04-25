@@ -25,7 +25,6 @@ def met_get_ids(cur, conn, query):
     conn.commit()
     return object_ids
 
-
 def met_add_to_database(cur, conn, query, start, end):
     cur.execute("CREATE TABLE IF NOT EXISTS met_objects (object_id INTEGER PRIMARY KEY, is_highlight TEXT, title TEXT, artist_name TEXT, object_enddate INTEGER, objectname TEXT, medium TEXT)")
     conn.commit()
@@ -179,7 +178,7 @@ def met_extra_credit_viz(cur, conn, file):
     plt.title("'Activist' Paintings By Medium at the Met")
     plt.show()
 
-def update_table(cur, conn):
+def met_update_table(cur, conn):
     cur.execute('''SELECT artist_id, artist_name FROM met_artists''')
     conn.commit()
     artist_ids = cur.fetchall()
@@ -215,6 +214,21 @@ def update_table(cur, conn):
             no_repeats_ids.append(id)
         cur.execute("UPDATE met_objects SET objectname = ? WHERE objectname = ?", (id, objectname))
     conn.commit()
+
+def chi_get_ids(cur, conn, query, limit = 100):
+    search_url = "https://api.artic.edu/api/v1/artworks/search?"
+    p = {"q" : query, "limit" : limit}
+    res = requests.get(search_url, params = p)
+    data = json.loads(res.text)
+
+    object_ids = []
+    for item in data['data']:
+        object_ids.append(item['id'])
+    cur.execute("CREATE TABLE IF NOT EXISTS chi_object_ids (id INTEGER PRIMARY KEY, chicago_id INTEGER)")
+    for i in range(len(object_ids)):
+        cur.execute("INSERT OR IGNORE INTO chi_object_ids (id,chicago_id) VALUES (?,?)",(i,object_ids[i]))
+    conn.commit()
+    return object_ids
 
 def chi_add_to_database(cur, conn, query, db_filename, start, end):
     cur.execute("CREATE TABLE IF NOT EXISTS chicago_objects (object_id INTEGER PRIMARY KEY, title TEXT, artist_name TEXT, object_enddate INTEGER, medium TEXT, origin TEXT, popularity TEXT)")
