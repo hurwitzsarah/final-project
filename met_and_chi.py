@@ -32,7 +32,7 @@ def met_add_to_database(cur, conn, query, start, end):
     no_repeats_names = []
     no_repeats_mediums = []
     no_repeats_artists = []
-    object_ids = get_ids(cur, conn, query)
+    object_ids = met_get_ids(cur, conn, query)
     for id in object_ids[start:end]:
         try:
             object_url = "https://collectionapi.metmuseum.org/public/collection/v1/objects/" + str(id)
@@ -179,7 +179,7 @@ def met_extra_credit_viz(cur, conn, file):
     plt.title("'Activist' Paintings By Medium at the Met")
     plt.show()
 
-def met_update_table(cur, conn):
+def update_table(cur, conn):
     cur.execute('''SELECT artist_id, artist_name FROM met_artists''')
     conn.commit()
     artist_ids = cur.fetchall()
@@ -215,21 +215,6 @@ def met_update_table(cur, conn):
             no_repeats_ids.append(id)
         cur.execute("UPDATE met_objects SET objectname = ? WHERE objectname = ?", (id, objectname))
     conn.commit()
-
-def chi_get_ids(cur, conn, query, limit = 100):
-    search_url = "https://api.artic.edu/api/v1/artworks/search?"
-    p = {"q" : query, "limit" : limit}
-    res = requests.get(search_url, params = p)
-    data = json.loads(res.text)
-
-    object_ids = []
-    for item in data['data']:
-        object_ids.append(item['id'])
-    cur.execute("CREATE TABLE IF NOT EXISTS chi_object_ids (id INTEGER PRIMARY KEY, chicago_id INTEGER)")
-    for i in range(len(object_ids)):
-        cur.execute("INSERT OR IGNORE INTO chi_object_ids (id,chicago_id) VALUES (?,?)",(i,object_ids[i]))
-    conn.commit()
-    return object_ids
 
 def chi_add_to_database(cur, conn, query, db_filename, start, end):
     cur.execute("CREATE TABLE IF NOT EXISTS chicago_objects (object_id INTEGER PRIMARY KEY, title TEXT, artist_name TEXT, object_enddate INTEGER, medium TEXT, origin TEXT, popularity TEXT)")
@@ -432,11 +417,14 @@ def chi_write_file(cur, conn):
 
 def main():
     cur, conn = setUpDatabase("chicago_met_data.db")
-    met_add_to_database(cur, conn, "activism",'chicago_met_data.db', 0, 25)
-    met_add_to_database(cur, conn, "activism",'chicago_met_data.db', 25, 50)
-    met_add_to_database(cur, conn, "activism",'chicago_met_data.db', 50, 75)
-    met_add_to_database(cur, conn, "activism",'chicago_met_data.db', 75, 100)
+    met_add_to_database(cur, conn, "activism", 0, 25)
+    met_add_to_database(cur, conn, "activism", 25, 50)
+    met_add_to_database(cur, conn, "activism", 50, 75)
+    met_add_to_database(cur, conn, "activism", 75, 100)
     met_create_name_table(cur, conn)
+    met_create_medium_table(cur, conn)
+    met_create_artist_table(cur, conn)
+    met_update_table(cur, conn)
     met_dates_and_highlights(cur, conn, 'calculations.txt')
     met_names_and_highlights(cur, conn, 'calculations.txt')
     met_extra_credit_viz(cur, conn, 'calculations.txt')
